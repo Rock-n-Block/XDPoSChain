@@ -106,6 +106,7 @@ type Context struct {
 	BlockNumber *big.Int       // Provides information for NUMBER
 	Time        *big.Int       // Provides information for TIME
 	Difficulty  *big.Int       // Provides information for DIFFICULTY
+	Random      *common.Hash   // Provides information for PREVRANDAO
 }
 
 // EVM is the Ethereum Virtual Machine base object and provides
@@ -437,6 +438,11 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 		} else {
 			err = ErrCodeStoreOutOfGas
 		}
+	}
+
+	// Reject code starting with 0xEF if EIP-3541 is enabled.
+	if err == nil && len(ret) >= 1 && ret[0] == 0xEF && evm.chainRules.IsLondon {
+		err = ErrInvalidCode
 	}
 
 	// When an error was returned by the EVM or when setting the creation code

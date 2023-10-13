@@ -52,6 +52,7 @@ var (
 // Transaction types.
 const (
 	LegacyTxType = iota
+	AccessListTxType
 	DynamicFeeTxType
 )
 
@@ -88,6 +89,7 @@ type TxData interface {
 	copy() TxData // creates a deep copy and initializes all fields
 
 	chainID() *big.Int
+	accessList() AccessList
 	data() []byte
 	gas() uint64
 	gasPrice() *big.Int
@@ -192,6 +194,10 @@ func (tx *Transaction) decodeTyped(b []byte) (TxData, error) {
 		return nil, errEmptyTypedTx
 	}
 	switch b[0] {
+	case AccessListTxType:
+		var inner AccessListTx
+		err := rlp.DecodeBytes(b[1:], &inner)
+		return &inner, err
 	case DynamicFeeTxType:
 		var inner DynamicFeeTx
 		err := rlp.DecodeBytes(b[1:], &inner)
@@ -269,6 +275,9 @@ func (tx *Transaction) ChainId() *big.Int {
 
 // Data returns the input data of the transaction.
 func (tx *Transaction) Data() []byte { return tx.inner.data() }
+
+// AccessList returns the access list of the transaction.
+func (tx *Transaction) AccessList() AccessList { return tx.inner.accessList() }
 
 // Gas returns the gas limit of the transaction.
 func (tx *Transaction) Gas() uint64 { return tx.inner.gas() }
@@ -404,6 +413,7 @@ func (tx *Transaction) TRC21Cost() *big.Int {
 	return total
 }
 
+// TODO is not working correctly
 func (tx *Transaction) IsSpecialTransaction() bool {
 	if tx.To() == nil {
 		return false
