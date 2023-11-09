@@ -1,4 +1,4 @@
-// Copyright 2014 The go-ethereum Authors
+// Copyright 2021 The go-ethereum Authors
 // This file is part of the go-ethereum library.
 //
 // The go-ethereum library is free software: you can redistribute it and/or modify
@@ -14,28 +14,29 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package types
+package misc
 
 import (
-	"bytes"
+	"errors"
+	"fmt"
 
-	"github.com/XinFinOrg/XDPoSChain/common"
-	"github.com/XinFinOrg/XDPoSChain/rlp"
-	"github.com/XinFinOrg/XDPoSChain/trie"
+	"github.com/XinFinOrg/XDPoSChain/params"
 )
 
-type DerivableList interface {
-	Len() int
-	GetRlp(i int) []byte
-}
-
-func DeriveSha(list DerivableList) common.Hash {
-	keybuf := new(bytes.Buffer)
-	trie := new(trie.Trie)
-	for i := 0; i < list.Len(); i++ {
-		keybuf.Reset()
-		rlp.Encode(keybuf, uint(i))
-		trie.Update(keybuf.Bytes(), list.GetRlp(i))
+// VerifyGaslimit verifies the header gas limit according increase/decrease
+// in relation to the parent gas limit.
+func VerifyGaslimit(parentGasLimit, headerGasLimit uint64) error {
+	// Verify that the gas limit remains within allowed bounds
+	diff := int64(parentGasLimit) - int64(headerGasLimit)
+	if diff < 0 {
+		diff *= -1
 	}
-	return trie.Hash()
+	limit := parentGasLimit / params.GasLimitBoundDivisor
+	if uint64(diff) >= limit {
+		return fmt.Errorf("invalid gas limit: have %d, want %d +-= %d", headerGasLimit, parentGasLimit, limit-1)
+	}
+	if headerGasLimit < params.MinGasLimit {
+		return errors.New("invalid gas limit below 5000")
+	}
+	return nil
 }

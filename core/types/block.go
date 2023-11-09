@@ -20,6 +20,7 @@ package types
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/XinFinOrg/XDPoSChain/trie"
 	"io"
 	"math/big"
 	"sort"
@@ -34,7 +35,7 @@ import (
 )
 
 var (
-	EmptyRootHash  = DeriveSha(Transactions{})
+	EmptyRootHash  = DeriveSha(Transactions{}, trie.NewStackTrie(nil))
 	EmptyUncleHash = CalcUncleHash(nil)
 )
 
@@ -82,11 +83,13 @@ type Header struct {
 	GasUsed     uint64         `json:"gasUsed"          gencodec:"required"`
 	Time        *big.Int       `json:"timestamp"        gencodec:"required"`
 	Extra       []byte         `json:"extraData"        gencodec:"required"`
-	MixDigest   common.Hash    `json:"mixHash"          gencodec:"required"`
-	Nonce       BlockNonce     `json:"nonce"            gencodec:"required"`
+	MixDigest   common.Hash    `json:"mixHash"`
+	Nonce       BlockNonce     `json:"nonce"`
 	Validators  []byte         `json:"validators"       gencodec:"required"`
 	Validator   []byte         `json:"validator"        gencodec:"required"`
 	Penalties   []byte         `json:"penalties"        gencodec:"required"`
+	// BaseFee was added by EIP-1559 and is ignored in legacy headers.
+	BaseFee *big.Int `json:"baseFee" rlp:"optional"`
 }
 
 // field type overrides for gencodec
@@ -97,6 +100,7 @@ type headerMarshaling struct {
 	GasUsed    hexutil.Uint64
 	Time       *hexutil.Big
 	Extra      hexutil.Bytes
+	BaseFee    *hexutil.Big
 	Hash       common.Hash `json:"hash"` // adds call to Hash() in MarshalJSON
 }
 
@@ -232,7 +236,7 @@ func NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*
 	if len(txs) == 0 {
 		b.header.TxHash = EmptyRootHash
 	} else {
-		b.header.TxHash = DeriveSha(Transactions(txs))
+		b.header.TxHash = DeriveSha(Transactions(txs), trie.NewStackTrie(nil))
 		b.transactions = make(Transactions, len(txs))
 		copy(b.transactions, txs)
 	}
@@ -240,7 +244,7 @@ func NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*
 	if len(receipts) == 0 {
 		b.header.ReceiptHash = EmptyRootHash
 	} else {
-		b.header.ReceiptHash = DeriveSha(Receipts(receipts))
+		b.header.ReceiptHash = DeriveSha(Receipts(receipts), trie.NewStackTrie(nil))
 		b.header.Bloom = CreateBloom(receipts)
 	}
 
@@ -276,6 +280,9 @@ func CopyHeader(h *Header) *Header {
 	}
 	if cpy.Number = new(big.Int); h.Number != nil {
 		cpy.Number.Set(h.Number)
+	}
+	if h.BaseFee != nil {
+		cpy.BaseFee = new(big.Int).Set(h.BaseFee)
 	}
 	if len(h.Extra) > 0 {
 		cpy.Extra = make([]byte, len(h.Extra))
@@ -350,8 +357,14 @@ func (b *Block) TxHash() common.Hash      { return b.header.TxHash }
 func (b *Block) ReceiptHash() common.Hash { return b.header.ReceiptHash }
 func (b *Block) UncleHash() common.Hash   { return b.header.UncleHash }
 func (b *Block) Extra() []byte            { return common.CopyBytes(b.header.Extra) }
-func (b *Block) Penalties() []byte        { return common.CopyBytes(b.header.Penalties) }
-func (b *Block) Validator() []byte        { return common.CopyBytes(b.header.Validator) }
+func (b *Block) BaseFee() *big.Int {
+	if b.header.BaseFee == nil {
+		return nil
+	}
+	return new(big.Int).Set(b.header.BaseFee)
+}
+func (b *Block) Penalties() []byte { return common.CopyBytes(b.header.Penalties) }
+func (b *Block) Validator() []byte { return common.CopyBytes(b.header.Validator) }
 
 func (b *Block) Header() *Header { return CopyHeader(b.header) }
 
